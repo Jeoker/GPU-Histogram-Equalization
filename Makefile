@@ -12,7 +12,7 @@ RM = rm -f
 opencvLIB= -L/shared/apps/opencv-3.0.0-beta/INSTALL/lib
 opencvINC= -I/shared/apps/opencv-3.0.0-beta/INSTALL/include
 
-GENCODE_FLAGS := -gencode arch=compute_$(SM),code=sm_$(SM)
+GENCODE_FLAGS := -gencode arch=compute_$(SM),code=sm_$(SM) -arch sm_$(SM)
 LIB_FLAGS := -lcudadevrt -lcudart
 
 NVCCFLAGS :=

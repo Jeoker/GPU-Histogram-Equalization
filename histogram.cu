@@ -29,6 +29,7 @@
 
 /* Switch of time counting */
 #define CUDA_TIMING
+#define CPU_SWITCH
 
 unsigned char *input_gpu;
 unsigned char *output_gpu;
@@ -71,7 +72,7 @@ __global__ void prefixSum(unsigned int *intensity_num,
 	}
 
 	for (int i = 0; i < INTENSITY_RANGE; ++i) {
-		intensity_sum[i] = intensity_num[i] / (height * width);	
+		intensity_sum[i] = ((double)(intensity_num[i])) / (height * width);	
 	}
 }
 
@@ -86,7 +87,10 @@ __global__ void histo_equalized (unsigned char *input,
 	unsigned int location = y * TILE_SIZE * gridDim.x + x;
 
     if (x < width && y < height) {
+		/* printf("%lf \n", intensity_sum[location]); */
+		/* output[location] = 1; */
 		output[location] = (unsigned char) ((INTENSITY_RANGE - 1) * intensity_sum[location]);
+		/* printf("%lf \n", intensity_sum[location]); */
 	}
 
 }
@@ -100,9 +104,10 @@ void histogram_gpu(unsigned char *data,
 	
 	int XSize = gridXSize * TILE_SIZE;
 	int YSize = gridYSize * TILE_SIZE;
-	
+
 	 /* Both are the same size (CPU/GPU). */
 	int size = XSize * YSize;
+	/* printf("Size is %d, height * width is %d", size, height * width); */
 		
 	 /* Allocate arrays in GPU memory */
 
@@ -139,12 +144,27 @@ void histogram_gpu(unsigned char *data,
 										    height,
 										    width,
 										    intensity_num);
-    checkCuda(cudaDeviceSynchronize());
 
+	checkCuda(cudaDeviceSynchronize());
 	prefixSum<<<1, 1>>>(intensity_num, intensity_sum, height, width);
 
-	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, output_gpu, height, width, intensity_sum);
+	double *intensity_sum2;
+	checkCuda(cudaMalloc((void**) &intensity_sum2, INTENSITY_RANGE * sizeof(double)));
 
+    checkCuda(cudaDeviceSynchronize());
+
+	double *cpu_sum;
+	cpu_sum = (double *) malloc(256 * sizeof(double));
+	cudaMemcpy(cpu_sum, intensity_sum, 256 * sizeof(double), cudaMemcpyDeviceToHost);
+
+	/* dim3 dimGrid2(gridXSize, gridYSize); */
+    /* dim3 dimBlock2(TILE_SIZE, TILE_SIZE); */
+	cudaMemcpy(intensity_sum2, cpu_sum, 256 * sizeof(double), cudaMemcpyHostToDevice);
+	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, output_gpu, height, width, intensity_sum2);
+
+	/* for (int i = 0; i < 256; ++i) { */
+	/* 	printf("%lf \n", cpu_sum[i]); */
+	/* } */
     checkCuda(cudaDeviceSynchronize());
 
 	#if defined(CUDA_TIMING)
@@ -152,6 +172,7 @@ void histogram_gpu(unsigned char *data,
 		printf("Kernel Execution Time: %f ms\n", Ktime);
 	#endif
         
+
 	 /* Retrieve results from the GPU */
 	checkCuda(cudaMemcpy(data, 
 						output_gpu, 
@@ -163,6 +184,8 @@ void histogram_gpu(unsigned char *data,
 	checkCuda(cudaFree(input_gpu));
 	checkCuda(cudaFree(intensity_num));
 	checkCuda(cudaFree(intensity_sum));
+	checkCuda(cudaFree(intensity_sum2));
+	free(cpu_sum);
 }
 
 void histogram_gpu_warmup(unsigned char *data, 

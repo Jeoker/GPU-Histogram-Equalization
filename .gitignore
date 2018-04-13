@@ -2,3 +2,5 @@
 *.png
 *.jpg
 cpu-heq.cpp
+*.swp
+histogram

@@ -63,34 +63,35 @@ __global__ void count_intensity(unsigned char *input,
 	}
 }
 
-__global__ void prefixSum(unsigned int *intensity_num,
-						  double *intensity_sum,
-						  unsigned int height,
-						  unsigned int width) {
+__global__ void prefixSum(unsigned int *intensity_num) {
 	for (int i = 1; i < INTENSITY_RANGE; ++i) {
 		intensity_num[i] += intensity_num[i - 1];
 	}
+}
 
-	for (int i = 0; i < INTENSITY_RANGE; ++i) {
-		intensity_sum[i] = ((double)(intensity_num[i])) / (height * width);	
+__global__ void probability(unsigned int *intensity_num,
+						    double *intensity_pro,
+						    unsigned int height,
+						    unsigned int width) {
+	unsigned int index = threadIdx.x;
+	if (index < INTENSITY_RANGE) {
+		/* printf("index is %d\n", index); */
+		intensity_pro[index] = ((double) intensity_num[index]) / (height * width);
 	}
 }
 
-__global__ void histo_equalized (unsigned char *input,
-					  unsigned char *output,
-					  unsigned int height,
-			      	  unsigned int width,
-			   		  double *intensity_sum) {
+__global__ void histo_equalized(unsigned char* input,
+							    double *intensity_pro,
+							    unsigned char *output,
+							    unsigned int height,
+							    unsigned int width) {
   	unsigned int x = blockIdx.x * TILE_SIZE + threadIdx.x;
 	unsigned int y = blockIdx.y * TILE_SIZE+ threadIdx.y;
 
 	unsigned int location = y * TILE_SIZE * gridDim.x + x;
 
     if (x < width && y < height) {
-		/* printf("%lf \n", intensity_sum[location]); */
-		/* output[location] = 1; */
-		output[location] = (unsigned char) ((INTENSITY_RANGE - 1) * intensity_sum[location]);
-		/* printf("%lf \n", intensity_sum[location]); */
+		output[location] = (unsigned char) ((INTENSITY_RANGE - 1) * intensity_pro[input[location]]);
 	}
 
 }
@@ -113,13 +114,12 @@ void histogram_gpu(unsigned char *data,
 
 	/* Maybe assigned type according to the input size */
 	unsigned int *intensity_num;
-	double *intensity_sum;
+	double *intensity_pro;
 
 	checkCuda(cudaMalloc((void**) &input_gpu, size * sizeof(unsigned char)));
 	checkCuda(cudaMalloc((void**) &output_gpu, size * sizeof(unsigned char)));
 	checkCuda(cudaMalloc((void**) &intensity_num, INTENSITY_RANGE * sizeof(unsigned int)));
-	checkCuda(cudaMalloc((void**) &intensity_sum, INTENSITY_RANGE * sizeof(double)));
-
+	checkCuda(cudaMalloc((void**) &intensity_pro, INTENSITY_RANGE * sizeof(double)));
 	
      /* Copy data to GPU */
     checkCuda(cudaMemcpy(input_gpu, 
@@ -145,27 +145,11 @@ void histogram_gpu(unsigned char *data,
 										    width,
 										    intensity_num);
 
-	checkCuda(cudaDeviceSynchronize());
-	prefixSum<<<1, 1>>>(intensity_num, intensity_sum, height, width);
+	prefixSum<<<1, 1>>>(intensity_num);
 
-	double *intensity_sum2;
-	checkCuda(cudaMalloc((void**) &intensity_sum2, INTENSITY_RANGE * sizeof(double)));
+	probability<<<1, INTENSITY_RANGE>>>(intensity_num, intensity_pro, height, width);
 
-    checkCuda(cudaDeviceSynchronize());
-
-	double *cpu_sum;
-	cpu_sum = (double *) malloc(256 * sizeof(double));
-	cudaMemcpy(cpu_sum, intensity_sum, 256 * sizeof(double), cudaMemcpyDeviceToHost);
-
-	/* dim3 dimGrid2(gridXSize, gridYSize); */
-    /* dim3 dimBlock2(TILE_SIZE, TILE_SIZE); */
-	cudaMemcpy(intensity_sum2, cpu_sum, 256 * sizeof(double), cudaMemcpyHostToDevice);
-	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, output_gpu, height, width, intensity_sum2);
-
-	/* for (int i = 0; i < 256; ++i) { */
-	/* 	printf("%lf \n", cpu_sum[i]); */
-	/* } */
-    checkCuda(cudaDeviceSynchronize());
+	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, intensity_pro, output_gpu, height, width);
 
 	#if defined(CUDA_TIMING)
 		TIMER_END(Ktime);
@@ -183,9 +167,7 @@ void histogram_gpu(unsigned char *data,
 	checkCuda(cudaFree(output_gpu));
 	checkCuda(cudaFree(input_gpu));
 	checkCuda(cudaFree(intensity_num));
-	checkCuda(cudaFree(intensity_sum));
-	checkCuda(cudaFree(intensity_sum2));
-	free(cpu_sum);
+	checkCuda(cudaFree(intensity_pro));
 }
 
 void histogram_gpu_warmup(unsigned char *data, 

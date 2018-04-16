@@ -10,12 +10,9 @@
   cudaEventCreate(&t##_start);        \
   cudaEventCreate(&t##_end);               
  
- 
 #define TIMER_START(t)                \
   cudaEventRecord(t##_start);         \
   cudaEventSynchronize(t##_start);    \
-
- 
  
 #define TIMER_END(t)                             \
   cudaEventRecord(t##_end);                      \
@@ -24,7 +21,7 @@
   cudaEventDestroy(t##_start);                   \
   cudaEventDestroy(t##_end);     
 
-#define TILE_SIZE 16
+#define TILE_SIZE 512
 #define INTENSITY_RANGE 256
 
 /* Switch of time counting */
@@ -33,33 +30,24 @@
 
 unsigned char *input_gpu;
 unsigned char *output_gpu;
-                
 
 /* Warm up kernel */
 __global__ void kernel(unsigned char *input, 
                        unsigned char *output) {
         
-  	int x = blockIdx.x * TILE_SIZE + threadIdx.x;
-	int y = blockIdx.y * TILE_SIZE+ threadIdx.y;
-                
-	int location = 	y * TILE_SIZE * gridDim.x + x;
+  	int location = blockIdx.x * TILE_SIZE + threadIdx.x;
 	
-	output[location] = x % 255;
-
+	output[location] = location % 255;
 }
 
 /* Processing GPU kernel */
 __global__ void count_intensity(unsigned char *input,
-								unsigned int height,
-								unsigned int width,
+								unsigned int size,
 							    unsigned int *intensity_num) {
+	
+    unsigned int location = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-  	unsigned int x = blockIdx.x * TILE_SIZE + threadIdx.x;
-	unsigned int y = blockIdx.y * TILE_SIZE + threadIdx.y;
-
-	unsigned int location = y * TILE_SIZE * gridDim.x + x;
-
-	if (x < width && y < height) {
+	if (location < size) {
 		atomicAdd(&intensity_num[input[location]], 1);
 	}
 }
@@ -77,50 +65,36 @@ __global__ void prefixSum(unsigned int *intensity_num,
 
 __global__ void probability(unsigned int *intensity_num,
 						    double *intensity_pro,
-						    unsigned int height,
-						    unsigned int width,
+						    unsigned int size,
 							unsigned char *min_index) {
 	unsigned int index = threadIdx.x;
 	if (index < INTENSITY_RANGE) {
-		intensity_pro[index] = ((double) (intensity_num[index] - intensity_num[*min_index])) / (height * width - intensity_num[*min_index]);
+		intensity_pro[index] = ((double) (intensity_num[index] - intensity_num[*min_index])) / (size - intensity_num[*min_index]);
 	}
 }
 
 __global__ void histo_equalized(unsigned char* input,
+							    unsigned int size,
 							    double *intensity_pro,
-							    unsigned char *output,
-							    unsigned int height,
-							    unsigned int width) {
+							    unsigned char *output) {
 
-  	unsigned int x = blockIdx.x * TILE_SIZE + threadIdx.x;
-	unsigned int y = blockIdx.y * TILE_SIZE+ threadIdx.y;
+  	unsigned int location = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-	unsigned int location = y * TILE_SIZE * gridDim.x + x;
-
-    if (x < width && y < height) {
-		output[location] = (unsigned char) ((INTENSITY_RANGE - 1) * intensity_pro[input[location]]);
+    if (location < size) {
+		output[location] = (unsigned char) ((INTENSITY_RANGE - 1) * 
+                            intensity_pro[input[location]]);
 	}
-
 }
 
 void histogram_gpu(unsigned char *data, 
                    unsigned int height, 
                    unsigned int width) {
                          
-	int gridXSize = 1 + ((width - 1) / TILE_SIZE);
-	int gridYSize = 1 + ((height - 1) / TILE_SIZE);
+    /* Both are the same size (CPU/GPU). */
+	int size = width * height;
+	int gridSize = 1 + ((size - 1) / TILE_SIZE);
 	
-	int XSize = gridXSize * TILE_SIZE;
-	int YSize = gridYSize * TILE_SIZE;
-
-	 /* Both are the same size (CPU/GPU). */
-	int size = XSize * YSize;
-	/* printf("Size is %d, height * width is %d", size, height * width); */
-		
-	 /* Allocate arrays in GPU memory */
-
-	/* Maybe assigned type according to the input size */
-	unsigned int *intensity_num;
+    unsigned int *intensity_num;
 	double *intensity_pro;
 	unsigned char *min_index;
 
@@ -141,8 +115,8 @@ void histogram_gpu(unsigned char *data,
 
         
      /* Execute algorithm */
-	dim3 dimGrid(gridXSize, gridYSize);
-    dim3 dimBlock(TILE_SIZE, TILE_SIZE);
+	dim3 dimGrid(gridSize);
+    dim3 dimBlock(TILE_SIZE);
 
      /* Kernel Call */
 	#if defined(CUDA_TIMING)
@@ -152,21 +126,19 @@ void histogram_gpu(unsigned char *data,
 	#endif
 
 	count_intensity<<<dimGrid, dimBlock>>>(input_gpu,
-										    height,
-										    width,
+										    size,
 										    intensity_num);
 
 	prefixSum<<<1, 1>>>(intensity_num, min_index);
 
-	probability<<<1, INTENSITY_RANGE>>>(intensity_num, intensity_pro, height, width, min_index);
+	probability<<<1, INTENSITY_RANGE>>>(intensity_num, intensity_pro, size, min_index);
 
-	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, intensity_pro, output_gpu, height, width);
+	histo_equalized<<<dimGrid, dimBlock>>>(input_gpu, size, intensity_pro, output_gpu);
 
 	#if defined(CUDA_TIMING)
 		TIMER_END(Ktime);
 		printf("Kernel Execution Time: %f ms\n", Ktime);
 	#endif
-        
 
 	 /* Retrieve results from the GPU */
 	checkCuda(cudaMemcpy(data, 
@@ -186,14 +158,10 @@ void histogram_gpu_warmup(unsigned char *data,
 					      unsigned int height, 
                           unsigned int width) {
                          
-	int gridXSize = 1 + (( width - 1) / TILE_SIZE);
-	int gridYSize = 1 + ((height - 1) / TILE_SIZE);
+    /* Both are the same size (CPU/GPU). */
+	int size = height*width;
 	
-	int XSize = gridXSize*TILE_SIZE;
-	int YSize = gridYSize*TILE_SIZE;
-	
-	 /* Both are the same size (CPU/GPU). */
-	int size = XSize*YSize;
+	int gridSize = 1 + (( size - 1) / TILE_SIZE);
 	
 	 /* Allocate arrays in GPU memory */
 	checkCuda(cudaMalloc((void**) &input_gpu ,size*sizeof(unsigned char)));
@@ -209,8 +177,8 @@ void histogram_gpu_warmup(unsigned char *data,
 	checkCuda(cudaDeviceSynchronize());
         
 	 /* Execute algorithm */
-	dim3 dimGrid(gridXSize, gridYSize);
-	dim3 dimBlock(TILE_SIZE, TILE_SIZE);
+	dim3 dimGrid(gridSize);
+	dim3 dimBlock(TILE_SIZE);
         
 	kernel<<<dimGrid, dimBlock>>>(input_gpu, 
 								  output_gpu);

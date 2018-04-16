@@ -1,6 +1,6 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
-
+#include "cuda_runtime_api.h"
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
@@ -11,33 +11,6 @@
 
 using namespace cv;
 using namespace std;
-
-/* RunLengthEncoding function and its helper functions*/
-/* vector<short> encodingRow(unsigned char *row, int width) { */
-/* 	vector<short> buffer; */
-/* 	int counter = 0; */
-
-/* 	for (int i = 0; i < width; ++i) { */
-/* 		if (i == 0) { */
-/* 			buffer.push_back(row[i]); */
-/* 			counter += 1; */
-/* 		} else if (i != 0 && row[i] == row[i - 1]) { */
-/* 			counter += 1; */
-/* 		} else { */
-/* 			buffer.push_back(counter); */
-/* 			buffer.push_back(row[i]); */
-/* 			counter = 1; */
-/* 		} */
-/* 	} */
-/* 	return buffer; */
-/* } */
-
-/* 	#pragma omp parallel for */
-/* 	for (int i = 0; i < height; ++i) { */
-/* 		encodedResult[i] = encodingRow(&ori[i * width], width); */
-/* 	} */
-/* 	return encodedResult; */
-/* } */
 
 int main( int argc, const char** argv ) {
         
@@ -82,10 +55,11 @@ int main( int argc, const char** argv ) {
         ///////////////////////
         // START GPU Processing
         ///////////////////////
-        
-        start_gpu = CLOCK();
    
         Mat img_hist_equalized_gpu = input_image.clone();
+        cudaMallocHost();
+
+        start_gpu = CLOCK();
 
         histogram_gpu((unsigned char *) img_hist_equalized_gpu.data, 
                                         height, 
@@ -130,7 +104,6 @@ int main( int argc, const char** argv ) {
         imwrite ("output_gpu.jpg", img_hist_equalized_gpu);
 
         //waitKey(0); //wait for key press
-
         //destroyAllWindows(); //destroy all open windows
 
         return 0;

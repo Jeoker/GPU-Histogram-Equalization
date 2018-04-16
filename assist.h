@@ -5,4 +5,5 @@
 double CLOCK();
 
 cudaError_t checkCuda(cudaError_t result);
+
 #endif

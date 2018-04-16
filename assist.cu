@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdio.h>
 #include "assist.h"
-
+#include <omp.h>
 /* Switch of debuging */
 #define DEBUG
 

@@ -30,6 +30,7 @@ int main( int argc, const char** argv ) {
         
         unsigned int height = input_image.rows;
         unsigned int  width = input_image.cols;
+        unsigned int   size = height*width;
         
         ///////////////////////
         // START CPU Processing
@@ -57,15 +58,22 @@ int main( int argc, const char** argv ) {
         ///////////////////////
    
         Mat img_hist_equalized_gpu = input_image.clone();
-        cudaMallocHost();
+        
+        unsigned char *gpu_data;
+        cudaMallocHost((void**)&gpu_data, size*sizeof(char));
+        memcpy(gpu_data, img_hist_equalized_gpu.data, size*sizeof(char));
 
         start_gpu = CLOCK();
 
-        histogram_gpu((unsigned char *) img_hist_equalized_gpu.data, 
+        histogram_gpu(//(unsigned char *) img_hist_equalized_gpu.data, 
+                      (unsigned char *) gpu_data, 
                                         height, 
                                         width);
 
         finish_gpu = CLOCK();
+
+        memcpy(img_hist_equalized_gpu.data, gpu_data, size*sizeof(char));
+        cudaFreeHost(gpu_data);
 
         // Calculate % difference between GPU and CPU
         unsigned int wrong_pixels = 0;

@@ -41,5 +41,4 @@ $(TARGET): main.o assist.o histogram.o
 
 clean:
 	$(RM) *.o
-	$(RM) *.jpg 
 	$(RM) $(TARGET)

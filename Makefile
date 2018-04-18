@@ -33,10 +33,13 @@ histogram.o: ./histogram.cu
 dlink.o: ./assist.o ./histogram.o
 	$(NVCC) $(NVCCFLAGS) $^ -o $@ $(GENCODE_FLAGS) -dlink
 
-main.o: ./main.cpp ./assist.h ./histogram.h ./main.h
-	$(GCC) $(GccFLAGS) $(opencvLIB) $(opencvINC) -c $< -o $@
+main.o: ./main.cpp ./assist.h ./histogram.h ./main.h ./rlc_encode.h
+	$(GCC) $(GccFLAGS) $(opencvLIB) $(opencvINC) -c $< -o $@ -std=c++11
 
-$(TARGET): main.o assist.o histogram.o
+rlc_encode.o: ./rlc_encode.cpp ./rlc_encode.h
+	$(GCC) $(GccFLAGS) $(opencvLIB) $(opencvINC) -c $< -o $@ -std=c++11
+
+$(TARGET): main.o assist.o histogram.o rlc_encode.o
 		$(NVCC) $(NVCCFLAGS) $(opencvLIB) $(opencvINC) $^ -o $@ $(GENCODE_FLAGS) -lopencv_core -lopencv_highgui -lopencv_imgproc -lopencv_photo -lopencv_video	
 
 clean:

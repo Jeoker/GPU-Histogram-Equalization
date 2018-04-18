@@ -8,6 +8,8 @@
 #include "main.h"
 #include <vector>
 #include <omp.h>
+#include "rlc_encode.h"
+#include <stdlib.h>
 
 using namespace cv;
 using namespace std;
@@ -58,22 +60,44 @@ int main( int argc, const char** argv ) {
         ///////////////////////
    
         Mat img_hist_equalized_gpu = input_image.clone();
-        
+		
+		rlcResult* rlc = (rlcResult*) malloc(sizeof(rlcResult));
+		encode((unsigned char*) img_hist_equalized_gpu.data, height * width, rlc);
+
+        /* unsigned char *gpu_data; */
+        /* cudaMallocHost((void**)&gpu_data, size*sizeof(char)); */
+        /* memcpy(gpu_data, img_hist_equalized_gpu.data, size*sizeof(char)); */
+
+		unsigned char *grey_value = &((rlc->grey_value)[0]);
+		unsigned int *pixel_count = &((rlc->number_count)[0]);
+		unsigned int compress_size = (rlc->grey_value).size();
+
         unsigned char *gpu_data;
-        cudaMallocHost((void**)&gpu_data, size*sizeof(char));
-        memcpy(gpu_data, img_hist_equalized_gpu.data, size*sizeof(char));
+        cudaMallocHost((void**)&gpu_data, size * sizeof(char));
+
+		unsigned char *grey_value_gpu;
+		unsigned int *pixel_count_gpu;
+        cudaMallocHost((void**)&grey_value_gpu, compress_size * sizeof(char));
+        cudaMallocHost((void**)&pixel_count_gpu, compress_size * sizeof(char));
+		memcpy(grey_value_gpu, grey_value, compress_size * sizeof(char));
+		memcpy(pixel_count_gpu, pixel_count, compress_size * sizeof(char));
 
         start_gpu = CLOCK();
 
-        histogram_gpu(//(unsigned char *) img_hist_equalized_gpu.data, 
-                      (unsigned char *) gpu_data, 
-                                        height, 
-                                        width);
+        histogram_gpu(grey_value_gpu,
+					  pixel_count_gpu,
+					  compress_size,
+					  height, 
+                      width,
+   					  gpu_data);
 
         finish_gpu = CLOCK();
-
-        memcpy(img_hist_equalized_gpu.data, gpu_data, size*sizeof(char));
+	
+		free(rlc);
+        memcpy(img_hist_equalized_gpu.data, gpu_data, size * sizeof(char));
         cudaFreeHost(gpu_data);
+		cudaFreeHost(grey_value_gpu);
+		cudaFreeHost(pixel_count_gpu);
 
         // Calculate % difference between GPU and CPU
         unsigned int wrong_pixels = 0;

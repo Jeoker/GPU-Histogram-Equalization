@@ -1,56 +1,86 @@
-#include <omp.h>
 #include <stdlib.h>
-#include <rlc_encode.h>
+#include "rlc_encode.h"
+#include <assert.h>
+#include <stdio.h>
+#include <iostream>
 
-rlcResult *encode(unsigned char *image, int width, int height) {
+#define UNIT_TEST
+
+rlcResult *encode(unsigned char *image, int size, rlcResult* rlc)  {
 	vector<unsigned char> grey_value;
-	vector<short> number_count;
-	/* #pragma omp parallel for */ 
-	/* Todo: openMp, need to rewrite delimters*/
-	for (int i = 0; i < height; ++i) {
-		for (int j = 0; j < width; ++j) {
-			int index = i * width + j;
-			int count = 1;
-			/* deal with a special situation */
-			if (j == 0 && j == width - 1) {
-				grey_value.push_back(image[index]);
+	vector<unsigned int> number_count;
+	unsigned int count = 1;
+	for (int i = 0; i < size; ++i) {
+		if (i == 0 && i == size - 1) {
+			grey_value.push_back(image[i]);
+			number_count.push_back(count);
+			continue;
+		}
+	
+		if (i == size - 1) {
+			if (image[i] == image[i - 1]) {
+				count += 1;	
+				grey_value.push_back(image[i - 1]);
 				number_count.push_back(count);
-				continue;
+			} else if (image[i] != image[i - 1]) {
+				grey_value.push_back(image[i - 1]);
+				number_count.push_back(count);
+				grey_value.push_back(image[i]);
+				number_count.push_back(1);
 			}
-			/* if j is the last one of this row, we need stop */
-			if (j == width - 1) {
-				if (image[index] == image[index - 1]) {
-					count += 1;	
-					grey_value.push_back(image[index - 1]);
-					number_count.push_back(count);
-				} else if (image[index] != image[index = 1]) {
-					grey_value.push_back(image[index - 1]);
-					number_count.push_back(count);
-					grey_value.push_back(image[index]);
-					number_count.push_back(1);
-				}
-				continue;
-			}
+			continue;
+		}
 
-			if (j == 0) {
-				continue;	
+		if (i == 0) {
+			continue;	
+		} else {
+			if (image[i] == image[i - 1]) {
+				count += 1;	
 			} else {
-				if (image[index] == image[index - 1]) {
-					count += 1;	
-				} else {
-					grey_value.push_back(image[index - 1]);
-					number_count.push_back(count);
-					count = 1;
-				}
+				grey_value.push_back(image[i - 1]);
+				number_count.push_back(count);
+				count = 1;
 			}
-		} 
+		}
 	}
 
-
-	rlcResult *rel = (rlcResult*) malloc(sizeof(rlcResult));
-	rel->grey_value = &grey_value;
-	rel->number_grey = &number_count;
-	rel->delimiters = &delimiters;
-	return rel;
+	for (int i = 1; i < number_count.size(); ++i) {
+		number_count[i]	+= number_count[i - 1];
+	}
+	rlc->grey_value = grey_value;
+	rlc->number_count = number_count;
+	return rlc;
 }
 
+#ifdef UNIT_TEST
+/* Simple Unit test */
+int main() {
+	unsigned char testInput[] = {'a', 'a', 'b', 'c', 'c',
+								 'd', 'd', 'a', 'e', 'a',
+								 'a', 'a', 'a', 'a', 'b'};
+	int expected_num[] = {2, 3, 5, 7, 8,  9, 14, 15};
+	unsigned char expected_grey[] = {'a', 'b', 'c', 'd', 'a', 'e', 'a', 'b'};
+
+	rlcResult* rlc = (rlcResult*) malloc(sizeof(rlcResult));
+	encode(testInput, 15, rlc);
+	bool flag = false;
+
+	for (int i = 0; i < (rlc->number_count).size(); ++i) {
+        if (expected_num[i] != (rlc->number_count)[i] || expected_grey[i] != (rlc->grey_value)[i]) {
+			cout << "error starts at " << i << endl;
+			cout << "expected_num is " << expected_num[i] << endl;
+			cout << "expected_grey is " << expected_grey[i] << endl;
+			cout << "rlc_number_count is " << (rlc->number_count)[i] << endl;
+			cout << "rlc_grey_value is " << (rlc->grey_value)[i] << endl;
+            break;
+        }
+        if (i == 7) {
+            flag = true;
+        }
+	}
+    assert(flag);
+	cout << "Unit test passed" << endl;
+	free(rlc);
+	return 0;
+}
+#endif

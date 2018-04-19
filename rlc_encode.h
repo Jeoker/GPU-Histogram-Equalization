@@ -11,4 +11,10 @@ typedef struct
 
 void encode(unsigned char *image, int size, rlcResult *rlc);
 
+unsigned char *decode(unsigned char *grey_value,
+                      unsigned int *pixel_count,
+                      double *probality,
+                      unsigned int compress_size,
+                      int size);
+
 #endif

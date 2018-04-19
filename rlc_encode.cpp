@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include <iostream>
 
-/* #define UNIT_TEST */
+
+// #define UNIT_TEST 
 
 void encode(unsigned char *image, int size, rlcResult *rlc)
 {
@@ -66,6 +67,32 @@ void encode(unsigned char *image, int size, rlcResult *rlc)
     rlc->number_count = number_count;
 }
 
+unsigned char *decode(unsigned char *grey_value,
+                      unsigned int *pixel_count,
+                      double *probality,
+                      unsigned int compress_size,
+                      int size) {
+    unsigned char *output = (unsigned char*) malloc(size * sizeof(unsigned char));
+    for (int i = compress_size - 1; i >= 0; --i) {
+        if (i == 0) {
+            continue;
+        } else {
+            pixel_count[i] -= pixel_count[i - 1];
+        }
+    }
+
+    int out_index = 0;
+    for (int i = 0; i < compress_size; ++i) {
+        while (pixel_count[i] > 0) {
+            output[out_index++] = (int) (255L * probality[grey_value[i]]);
+            --(pixel_count[i]);
+        }
+    }
+
+    assert(size == out_index);
+    return output;
+}
+
 #ifdef UNIT_TEST
 /* Simple Unit test */
 int main()
@@ -84,11 +111,6 @@ int main()
     {
         if (expected_num[i] != (*(rlc->number_count))[i] || expected_grey[i] != (*(rlc->grey_value))[i])
         {
-            cout << "error starts at " << i << endl;
-            cout << "expected_num is " << expected_num[i] << endl;
-            cout << "expected_grey is " << expected_grey[i] << endl;
-            cout << "rlc_number_count is " << (*(rlc->number_count))[i] << endl;
-            cout << "rlc_grey_value is " << (*(rlc->grey_value))[i] << endl;
             break;
         }
         if (i == 7)

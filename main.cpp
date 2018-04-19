@@ -73,12 +73,12 @@ int main(int argc, const char **argv)
     unsigned int *pixel_count = &((*(rlc->number_count))[0]);
     unsigned int compress_size = (*(rlc->number_count)).size();
 
-    unsigned char *gpu_data;
+    double *gpu_data;
 
     unsigned char *grey_value_gpu;
     unsigned int *pixel_count_gpu;
 
-    cudaMallocHost((void **)&gpu_data, size * sizeof(unsigned char));
+    cudaMallocHost((void **)&gpu_data, 256 * sizeof(double));
     cudaMallocHost((void **)&pixel_count_gpu, compress_size * sizeof(unsigned int));
     cudaMallocHost((void **)&grey_value_gpu, compress_size * sizeof(unsigned char));
 
@@ -95,16 +95,26 @@ int main(int argc, const char **argv)
                   width,
                   gpu_data);
 
+
     finish_gpu = CLOCK();
+
+    unsigned char* decodeResult =
+                   decode(grey_value,
+                          pixel_count_gpu,
+                          gpu_data,
+                          compress_size,
+                          size);
 
     delete rlc->grey_value;
     delete rlc->number_count;
     free(rlc);
     rlc = nullptr;
-    memcpy(img_hist_equalized_gpu.data, gpu_data, size * sizeof(unsigned char));
+
+    memcpy(img_hist_equalized_gpu.data, decodeResult, size * sizeof(unsigned char));
     cudaFreeHost(gpu_data);
     cudaFreeHost(grey_value_gpu);
     cudaFreeHost(pixel_count_gpu);
+    free(decodeResult);
 
     // Calculate % difference between GPU and CPU
     unsigned int wrong_pixels = 0;

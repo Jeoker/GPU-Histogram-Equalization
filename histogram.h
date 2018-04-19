@@ -11,7 +11,7 @@ void histogram_gpu(unsigned char *grey_value,
                    unsigned int compress_size,
                    unsigned int height,
                    unsigned int width,
-                   unsigned char *output_cpu);
+                   double *output_cpu);
 
 void histogram_gpu_warmup(unsigned char *data,
                           unsigned int height,

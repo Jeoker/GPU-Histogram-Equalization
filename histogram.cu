@@ -89,39 +89,12 @@ __global__ void probability(unsigned int *intensity_num,
     }
 }
 
-__global__ void histo_equalized(unsigned char *grey_value,
-                                unsigned int size,
-                                double *intensity_pro,
-                                unsigned int *pixel_count,
-                                unsigned int compress_size,
-                                unsigned char *output)
-{
-
-    unsigned int location = blockIdx.x * TILE_SIZE + threadIdx.x;
-
-    if (location < size)
-    {
-        int index = 0;
-        /* binary search ?? */
-        for (int i = 0; i < compress_size; i++)
-        {
-            if (location < pixel_count[i])
-            {
-                index = i;
-                break;
-            }
-        }
-        output[location] = (unsigned char)((INTENSITY_RANGE - 1) *
-                                           intensity_pro[grey_value[index]]);
-    }
-}
-
 void histogram_gpu(unsigned char *grey_value,
                    unsigned int *pixel_count,
                    unsigned int compress_size,
                    unsigned int height,
                    unsigned int width,
-                   unsigned char *output_cpu)
+                   double *output_cpu)
 {
     /* Both are the same size (CPU/GPU). */
 
@@ -133,12 +106,10 @@ void histogram_gpu(unsigned char *grey_value,
     unsigned char *min_index;
     unsigned char *grey_value_gpu;
     unsigned int *pixel_count_gpu;
-    unsigned char *output_gpu;
 
     checkCuda(cudaMalloc((void **)&grey_value_gpu, compress_size * sizeof(unsigned char)));
     checkCuda(cudaMalloc((void **)&pixel_count_gpu, compress_size * sizeof(unsigned int)));
 
-    checkCuda(cudaMalloc((void **)&output_gpu, size * sizeof(unsigned char)));
     checkCuda(cudaMalloc((void **)&intensity_num, INTENSITY_RANGE * sizeof(unsigned int)));
     checkCuda(cudaMalloc((void **)&intensity_pro, INTENSITY_RANGE * sizeof(double)));
     checkCuda(cudaMalloc((void **)&min_index, 1 * sizeof(unsigned char)));
@@ -182,13 +153,6 @@ void histogram_gpu(unsigned char *grey_value,
                                         size,
                                         min_index);
 
-    histo_equalized<<<dimGrid, dimBlock>>>(grey_value_gpu,
-                                           size,
-                                           intensity_pro,
-                                           pixel_count_gpu,
-                                           compress_size,
-                                           output_gpu);
-
 #if defined(CUDA_TIMING)
     TIMER_END(Ktime);
     printf("Kernel Execution Time: %f ms\n", Ktime);
@@ -196,8 +160,8 @@ void histogram_gpu(unsigned char *grey_value,
 
     /* Retrieve results from the GPU */
     checkCuda(cudaMemcpy(output_cpu,
-                         output_gpu,
-                         size * sizeof(unsigned char),
+                         intensity_pro,
+                         INTENSITY_RANGE * sizeof(double),
                          cudaMemcpyDeviceToHost));
 
     /* Free resources and end the program */

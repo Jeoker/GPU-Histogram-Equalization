@@ -12,107 +12,111 @@
 using namespace cv;
 using namespace std;
 
-int main( int argc, const char** argv ) {
-        
-        double start_cpu, finish_cpu;
-        double start_gpu, finish_gpu;
-        
-        // Read input image from argument
-        Mat input_image = imread(argv[1], IMREAD_COLOR);
+int main(int argc, const char **argv)
+{
 
-        if (input_image.empty()){
-                cout << "Image cannot be loaded..!!" << endl;
-                return -1;
+    double start_cpu, finish_cpu;
+    double start_gpu, finish_gpu;
+
+    // Read input image from argument
+    Mat input_image = imread(argv[1], IMREAD_COLOR);
+
+    if (input_image.empty())
+    {
+        cout << "Image cannot be loaded..!!" << endl;
+        return -1;
+    }
+
+    // Convert the color image to grayscale image
+    cvtColor(input_image, input_image, COLOR_BGR2GRAY);
+
+    unsigned int height = input_image.rows;
+    unsigned int width = input_image.cols;
+    unsigned int size = height * width;
+
+    ///////////////////////
+    // START CPU Processing
+    ///////////////////////
+    start_cpu = CLOCK();
+
+    // Equalize the histogram
+    Mat img_hist_equalized_cpu;
+    equalizeHist(input_image, img_hist_equalized_cpu);
+
+    finish_cpu = CLOCK();
+
+    ///////////////////////
+    // START GPU Warmup
+    ///////////////////////
+
+    Mat temp = input_image.clone();
+
+    histogram_gpu_warmup((unsigned char *)temp.data,
+                         height,
+                         width);
+
+    ///////////////////////
+    // START GPU Processing
+    ///////////////////////
+
+    Mat img_hist_equalized_gpu = input_image.clone();
+
+    unsigned char *gpu_data;
+    cudaMallocHost((void **)&gpu_data, size * sizeof(char));
+    memcpy(gpu_data, img_hist_equalized_gpu.data, size * sizeof(char));
+
+    start_gpu = CLOCK();
+
+    histogram_gpu( //(unsigned char *) img_hist_equalized_gpu.data,
+        (unsigned char *)gpu_data,
+        height,
+        width);
+
+    finish_gpu = CLOCK();
+
+    memcpy(img_hist_equalized_gpu.data, gpu_data, size * sizeof(char));
+    cudaFreeHost(gpu_data);
+
+    // Calculate % difference between GPU and CPU
+    unsigned int wrong_pixels = 0;
+    for (int j = 0; j < height; j++)
+    {
+        for (int i = 0; i < width; i++)
+        {
+            unsigned char cpu_pixel = img_hist_equalized_cpu.data[width * j + i];
+            unsigned char gpu_pixel = img_hist_equalized_gpu.data[width * j + i];
+
+            // If percentage difference is more than a threshold (10% diff), value is wrong
+            if (abs(cpu_pixel - gpu_pixel) > 25)
+                wrong_pixels++;
         }
+    }
 
-        // Convert the color image to grayscale image
-        cvtColor(input_image, input_image, COLOR_BGR2GRAY); 
-        
-        unsigned int height = input_image.rows;
-        unsigned int  width = input_image.cols;
-        unsigned int   size = height*width;
-        
-        ///////////////////////
-        // START CPU Processing
-        ///////////////////////
-        start_cpu = CLOCK();
-        
-        // Equalize the histogram
-        Mat img_hist_equalized_cpu;
-        equalizeHist(input_image, img_hist_equalized_cpu); 
+    cout << "CPU execution time: " << finish_cpu - start_cpu << " ms" << endl;
+    cout << "GPU execution time: " << finish_gpu - start_gpu << " ms" << endl;
+    cout << "Percentage difference: " << wrong_pixels * 100.0 / (height * width) << "%\n";
 
-        finish_cpu = CLOCK();
-        
-        ///////////////////////
-        // START GPU Warmup
-        ///////////////////////
-        
-        Mat temp = input_image.clone();
+    // Create windows
+    //namedWindow("Original Image", WINDOW_NORMAL );
+    //namedWindow("Histogram Equalized CPU", WINDOW_NORMAL );
+    //namedWindow("Histogram Equalized GPU", WINDOW_NORMAL );
 
-        histogram_gpu_warmup((unsigned char *) temp.data, 
-                                        height, 
-                                        width);
-        
-        ///////////////////////
-        // START GPU Processing
-        ///////////////////////
-   
-        Mat img_hist_equalized_gpu = input_image.clone();
-        
-        unsigned char *gpu_data;
-        cudaMallocHost((void**)&gpu_data, size*sizeof(char));
-        memcpy(gpu_data, img_hist_equalized_gpu.data, size*sizeof(char));
+    // Show images (or store results)
+    //imshow("Original Image", input_image);
+    //imshow("Histogram Equalized CPU", img_hist_equalized_cpu);
+    //imshow("Histogram Equalized GPU", img_hist_equalized_gpu);
 
-        start_gpu = CLOCK();
+    // Resize windows
+    //resizeWindow("Original Image", 640, 480 );
+    //resizeWindow("Histogram Equalized CPU", 640, 480 );
+    //resizeWindow("Histogram Equalized GPU", 640, 480 );
 
-        histogram_gpu(//(unsigned char *) img_hist_equalized_gpu.data, 
-                      (unsigned char *) gpu_data, 
-                                        height, 
-                                        width);
+    imwrite("input_baw.jpg", input_image);
+    imwrite("output_cpu.jpg", img_hist_equalized_cpu);
+    imwrite("output_gpu.jpg", img_hist_equalized_gpu);
 
-        finish_gpu = CLOCK();
+    //waitKey(0); //wait for key press
+    //destroyAllWindows(); //destroy all open windows
 
-        memcpy(img_hist_equalized_gpu.data, gpu_data, size*sizeof(char));
-        cudaFreeHost(gpu_data);
-
-        // Calculate % difference between GPU and CPU
-        unsigned int wrong_pixels = 0;
-        for(int j = 0; j < height; j++){
-                for(int i = 0; i < width; i++){
-                        unsigned char cpu_pixel = img_hist_equalized_cpu.data[width * j + i ];
-                        unsigned char gpu_pixel = img_hist_equalized_gpu.data[width * j + i ];
-                        
-                        // If percentage difference is more than a threshold (10% diff), value is wrong
-                        if (abs(cpu_pixel - gpu_pixel) > 25)
-                                wrong_pixels++;
-                }
-        }
-        
-        cout << "CPU execution time: " << finish_cpu - start_cpu << " ms" << endl;
-        cout << "GPU execution time: " << finish_gpu - start_gpu << " ms" << endl;
-        cout << "Percentage difference: " << wrong_pixels*100.0/(height*width) << "%\n";
-                
-        // Create windows
-        //namedWindow("Original Image", WINDOW_NORMAL );
-        //namedWindow("Histogram Equalized CPU", WINDOW_NORMAL );
-        //namedWindow("Histogram Equalized GPU", WINDOW_NORMAL );
-        
-        // Show images (or store results)
-        //imshow("Original Image", input_image);
-        //imshow("Histogram Equalized CPU", img_hist_equalized_cpu);
-        //imshow("Histogram Equalized GPU", img_hist_equalized_gpu);
-
-        // Resize windows
-        //resizeWindow("Original Image", 640, 480 );
-        //resizeWindow("Histogram Equalized CPU", 640, 480 );
-        //resizeWindow("Histogram Equalized GPU", 640, 480 );
-       
-        imwrite ("input_baw.jpg", input_image); 
-        imwrite ("output_cpu.jpg", img_hist_equalized_cpu);
-        imwrite ("output_gpu.jpg", img_hist_equalized_gpu);
-
-        //waitKey(0); //wait for key press
-        //destroyAllWindows(); //destroy all open windows
-
-        return 0;
+    return 0;
 }

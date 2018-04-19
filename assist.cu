@@ -6,7 +6,7 @@
 #include "assist.h"
 #include <omp.h>
 /* Switch of debuging */
-#define DEBUG
+// #define DEBUG
 
 double CLOCK() {
 	struct timespec t;

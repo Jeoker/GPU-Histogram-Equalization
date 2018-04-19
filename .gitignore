@@ -4,3 +4,4 @@
 cpu-heq.cpp
 *.swp
 histogram
+input/*.*

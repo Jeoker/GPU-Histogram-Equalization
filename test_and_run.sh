@@ -1,3 +1,3 @@
 make clean
 make all
-./histogram input/bridge_small.png
+./histogram input/Geotagged_articles_wikimap_RENDER_ca_huge

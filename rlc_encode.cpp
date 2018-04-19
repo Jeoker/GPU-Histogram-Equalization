@@ -8,8 +8,8 @@
 
 void encode(unsigned char *image, int size, rlcResult *rlc)
 {
-    auto grey_value = make_shared<vector<unsigned char>>();
-    auto number_count = make_shared<vector<unsigned int>>();
+    vector<unsigned char> *grey_value = new vector<unsigned char>;
+    vector<unsigned int> *number_count = new vector<unsigned int>;
 
     unsigned int count = 1;
     for (int i = 0; i < size; ++i)

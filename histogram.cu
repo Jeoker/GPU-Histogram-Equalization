@@ -44,21 +44,22 @@ __global__ void kernel(unsigned char *input,
 /* Processing GPU kernel */
 __global__ void count_intensity(unsigned char *grey_value,
                                 unsigned int *pixel_count,
-                                unsigned int comprss_size,
+                                unsigned int compress_size,
                                 unsigned int *intensity_num)
 {
 
     unsigned int location = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-    if (location < comprss_size && location > 0)
+    if (location < compress_size && location > 0)
     {
         atomicAdd(&intensity_num[grey_value[location]],
                   pixel_count[location] - pixel_count[location - 1]);
     }
-    if (location < comprss_size && location == 0)
+    if (location == 0)
     {
         atomicAdd(&intensity_num[grey_value[location]], pixel_count[location]);
     }
+
 }
 
 __global__ void prefixSum(unsigned int *intensity_num,
@@ -100,24 +101,18 @@ __global__ void histo_equalized(unsigned char *grey_value,
 
     if (location < size)
     {
-        int acc = 0;
-        int position = 0;
+        int index = 0;
         /* binary search ?? */
         for (int i = 0; i < compress_size; i++)
         {
-            if (acc >= pixel_count[i])
+            if (location < pixel_count[i])
             {
-                position = i;
+                index = i;
                 break;
             }
-            else
-            {
-                acc += pixel_count[i];
-            }
         }
-
         output[location] = (unsigned char)((INTENSITY_RANGE - 1) *
-                                           intensity_pro[pixel_count[position]]);
+                                           intensity_pro[grey_value[index]]);
     }
 }
 
@@ -128,11 +123,7 @@ void histogram_gpu(unsigned char *grey_value,
                    unsigned int width,
                    unsigned char *output_cpu)
 {
-
     /* Both are the same size (CPU/GPU). */
-
-    printf("pixel count last element on GPU is %d\n", pixel_count[641]);
-    printf("grey value last element on GPU is %d\n", grey_value[55]);
 
     int size = width * height;
     int gridSize = 1 + ((size - 1) / TILE_SIZE);
@@ -142,27 +133,30 @@ void histogram_gpu(unsigned char *grey_value,
     unsigned char *min_index;
     unsigned char *grey_value_gpu;
     unsigned int *pixel_count_gpu;
+    unsigned char *output_gpu;
 
     checkCuda(cudaMalloc((void **)&grey_value_gpu, compress_size * sizeof(unsigned char)));
-    checkCuda(cudaMalloc((void **)&pixel_count_gpu, compress_size * sizeof(unsigned char)));
+    checkCuda(cudaMalloc((void **)&pixel_count_gpu, compress_size * sizeof(unsigned int)));
 
     checkCuda(cudaMalloc((void **)&output_gpu, size * sizeof(unsigned char)));
     checkCuda(cudaMalloc((void **)&intensity_num, INTENSITY_RANGE * sizeof(unsigned int)));
     checkCuda(cudaMalloc((void **)&intensity_pro, INTENSITY_RANGE * sizeof(double)));
-    checkCuda(cudaMalloc((void **)&min_index, 1 * sizeof(double)));
+    checkCuda(cudaMalloc((void **)&min_index, 1 * sizeof(unsigned char)));
 
     /* Copy data to GPU */
     checkCuda(cudaMemcpy(grey_value_gpu,
                          grey_value,
-                         compress_size * sizeof(char),
+                         compress_size * sizeof(unsigned char),
                          cudaMemcpyHostToDevice));
+
     checkCuda(cudaMemcpy(pixel_count_gpu,
                          pixel_count,
-                         compress_size * sizeof(char),
+                         compress_size * sizeof(unsigned int),
                          cudaMemcpyHostToDevice));
 
     checkCuda(cudaMemset(intensity_num, 0, INTENSITY_RANGE * sizeof(unsigned int)));
-    checkCuda(cudaMemset(min_index, 0, 1 * sizeof(unsigned int)));
+
+    checkCuda(cudaMemset(min_index, 0, 1 * sizeof(unsigned char)));
     checkCuda(cudaDeviceSynchronize());
 
     /* Execute algorithm */
@@ -183,7 +177,10 @@ void histogram_gpu(unsigned char *grey_value,
 
     prefixSum<<<1, 1>>>(intensity_num, min_index);
 
-    probability<<<1, INTENSITY_RANGE>>>(intensity_num, intensity_pro, size, min_index);
+    probability<<<1, INTENSITY_RANGE>>>(intensity_num,
+                                        intensity_pro,
+                                        size,
+                                        min_index);
 
     histo_equalized<<<dimGrid, dimBlock>>>(grey_value_gpu,
                                            size,

@@ -63,37 +63,31 @@ int main(int argc, const char **argv)
 
     Mat img_hist_equalized_gpu = input_image.clone();
 
-    rlcResult *rlc = (rlcResult *)malloc(1024 * sizeof(rlcResult));
+    rlcResult *rlc = (rlcResult*) malloc(sizeof(rlcResult));
     encode((unsigned char *)img_hist_equalized_gpu.data, height * width, rlc);
 
     /* unsigned char *gpu_data; */
     /* cudaMallocHost((void**)&gpu_data, size*sizeof(char)); */
     /* memcpy(gpu_data, img_hist_equalized_gpu.data, size*sizeof(char)); */
-
     unsigned char *grey_value = &((*(rlc->grey_value))[0]);
     unsigned int *pixel_count = &((*(rlc->number_count))[0]);
     unsigned int compress_size = (*(rlc->number_count)).size();
 
-    // printf("last element on CPU is %d\n", pixel_count[641]);
-
     unsigned char *gpu_data;
-    cudaMallocHost((void **)&gpu_data, size * sizeof(char));
 
     unsigned char *grey_value_gpu;
     unsigned int *pixel_count_gpu;
 
-    cudaMallocHost((void **)&grey_value_gpu, compress_size * sizeof(char));
-    cudaMallocHost((void **)&pixel_count_gpu, compress_size * sizeof(char));
+    cudaMallocHost((void **)&gpu_data, size * sizeof(unsigned char));
+    cudaMallocHost((void **)&pixel_count_gpu, compress_size * sizeof(unsigned int));
+    cudaMallocHost((void **)&grey_value_gpu, compress_size * sizeof(unsigned char));
 
-    // printf("pixel count last element on CPU is %d\n", pixel_count_gpu[641]);
 
-    memcpy(grey_value_gpu, grey_value, compress_size * sizeof(char));
-    memcpy(pixel_count_gpu, pixel_count, compress_size * sizeof(char));
+    memcpy(pixel_count_gpu, pixel_count, compress_size * sizeof(unsigned int));
+    memcpy(grey_value_gpu, grey_value, compress_size * sizeof(unsigned char));
 
-    printf("pixel_count last element on CPU is %d\n", pixel_count_gpu[641]);
-    printf("grey value last element on CPU is %d\n", grey_value[55]);
+
     start_gpu = CLOCK();
-
     histogram_gpu(grey_value_gpu,
                   pixel_count_gpu,
                   compress_size,
@@ -103,9 +97,11 @@ int main(int argc, const char **argv)
 
     finish_gpu = CLOCK();
 
+    delete rlc->grey_value;
+    delete rlc->number_count;
     free(rlc);
     rlc = nullptr;
-    memcpy(img_hist_equalized_gpu.data, gpu_data, size * sizeof(char));
+    memcpy(img_hist_equalized_gpu.data, gpu_data, size * sizeof(unsigned char));
     cudaFreeHost(gpu_data);
     cudaFreeHost(grey_value_gpu);
     cudaFreeHost(pixel_count_gpu);

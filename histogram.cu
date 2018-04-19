@@ -41,14 +41,17 @@ __global__ void kernel(unsigned char *input,
 }
 
 /* Processing GPU kernel */
-__global__ void count_intensity(unsigned char *input,
+__global__ void count_intensity(unsigned int *input,
 								unsigned int size,
 							    unsigned int *intensity_num) {
 	
     unsigned int location = blockIdx.x * TILE_SIZE + threadIdx.x;
 
-	if (location < size) {
-		atomicAdd(&intensity_num[input[location]], 1);
+	if (location < (size >> 2)) {
+		atomicAdd(&intensity_num[(unsigned char)(input[location] & 0xFF000000)], 1);
+		atomicAdd(&intensity_num[(unsigned char)(input[location] & 0x00FF0000)], 1);
+		atomicAdd(&intensity_num[(unsigned char)(input[location] & 0x0000FF00)], 1);
+		atomicAdd(&intensity_num[(unsigned char)(input[location] & 0x000000FF)], 1);
 	}
 }
 
@@ -124,11 +127,11 @@ void histogram_gpu(unsigned char *data,
 		TIMER_CREATE(Ktime);
 		TIMER_START(Ktime);
 	#endif
+    
 
-	count_intensity<<<dimGrid, dimBlock>>>(input_gpu,
+	count_intensity<<<dimGrid, dimBlock>>>((unsigned int *)input_gpu,
 										    size,
 										    intensity_num);
-
 	prefixSum<<<1, 1>>>(intensity_num, min_index);
 
 	probability<<<1, INTENSITY_RANGE>>>(intensity_num, intensity_pro, size, min_index);

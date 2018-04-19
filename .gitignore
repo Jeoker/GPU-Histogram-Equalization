@@ -4,3 +4,5 @@
 cpu-heq.cpp
 *.swp
 histogram
+*.sh
+

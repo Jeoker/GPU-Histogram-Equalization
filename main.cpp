@@ -111,9 +111,9 @@ int main(int argc, const char **argv)
     //resizeWindow("Histogram Equalized CPU", 640, 480 );
     //resizeWindow("Histogram Equalized GPU", 640, 480 );
 
-    imwrite("input_baw.jpg", input_image);
-    imwrite("output_cpu.jpg", img_hist_equalized_cpu);
-    imwrite("output_gpu.jpg", img_hist_equalized_gpu);
+    // imwrite("input_baw.jpg", input_image);
+    imwrite("output/output_cpu.jpg", img_hist_equalized_cpu);
+    imwrite("output/output_gpu.jpg", img_hist_equalized_gpu);
 
     //waitKey(0); //wait for key press
     //destroyAllWindows(); //destroy all open windows
